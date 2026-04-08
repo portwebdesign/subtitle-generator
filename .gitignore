@@ -34,5 +34,5 @@ desktop.ini
 # Logs
 *.log
 
-
+# Agent task logs (internal, not for repo)
 agent-logs/
