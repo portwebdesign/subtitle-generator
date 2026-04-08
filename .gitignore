@@ -1,0 +1,38 @@
+# Rust build output
+/target/
+Cargo.lock
+
+# Binaries (downloaded by kur.bat / setup.bat)
+bin/
+models/
+dist/
+
+# Video/Audio test files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.srt
+
+# Temp files
+*_temp.wav
+*_temp.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+
+agnet-logs/
