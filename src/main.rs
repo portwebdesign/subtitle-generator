@@ -13,12 +13,9 @@ use std::thread;
 // ── Download URLs ──────────────────────────────────────────────────────────────
 const FFMPEG_URL: &str =
     "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
-// Primary whisper release
+// whisper.cpp moved from ggerganov/ to ggml-org/ — use whisper-bin (no OpenBLAS dep)
 const WHISPER_URL: &str =
-    "https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.5/whisper-blas-bin-x64.zip";
-// Fallback: older release with known structure
-const WHISPER_URL_FALLBACK: &str =
-    "https://github.com/ggerganov/whisper.cpp/releases/download/v1.6.2/whisper-blas-bin-x64.zip";
+    "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.4/whisper-bin-x64.zip";
 const MODEL_TINY_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin";
 
@@ -709,10 +706,13 @@ fn run_ps(script: &str) -> Result<(), String> {
 
 fn download_file(url: &str, dest: &str) -> Result<(), String> {
     let script = format!(
-        "try {{ [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; \
-         (New-Object System.Net.WebClient).DownloadFile('{}', '{}') }} \
-         catch {{ Write-Error $_.Exception.Message; exit 1 }}",
-        url, dest
+        "if (Get-Command curl.exe -ErrorAction SilentlyContinue) {{ \
+            curl.exe -sL -f -o '{}' '{}' \
+         }} else {{ \
+            [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; \
+            (New-Object System.Net.WebClient).DownloadFile('{}', '{}') \
+         }}",
+        dest, url, url, dest
     );
     run_ps(&script)
 }
@@ -756,13 +756,8 @@ fn download_whisper(bin_dir: &Path) -> Result<(), String> {
 
     let tmp = std::env::temp_dir().join("_sg_whisper.zip");
 
-    // Try primary URL
-    let dl = download_file(WHISPER_URL, tmp.to_str().unwrap_or(""));
-    if dl.is_err() || check_zip_size(&tmp, 1_000_000).is_err() {
-        // Try fallback
-        download_file(WHISPER_URL_FALLBACK, tmp.to_str().unwrap_or(""))?;
-        check_zip_size(&tmp, 1_000_000)?;
-    }
+    download_file(WHISPER_URL, tmp.to_str().unwrap_or(""))?;
+    check_zip_size(&tmp, 1_000_000)?;
 
     let bin_s = bin_dir.to_str().unwrap_or("").replace('\'', "''");
     let zip_s = tmp.to_str().unwrap_or("").replace('\'', "''");
