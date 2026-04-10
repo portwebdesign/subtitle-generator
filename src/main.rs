@@ -18,6 +18,32 @@ const WHISPER_URL: &str =
     "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.4/whisper-bin-x64.zip";
 const MODEL_TINY_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin";
+const MODEL_BASE_URL: &str =
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
+const MODEL_SMALL_URL: &str =
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
+const MODEL_MEDIUM_URL: &str =
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin";
+
+fn model_url(name: &str) -> &'static str {
+    match name {
+        "tiny"   => MODEL_TINY_URL,
+        "base"   => MODEL_BASE_URL,
+        "small"  => MODEL_SMALL_URL,
+        "medium" => MODEL_MEDIUM_URL,
+        _        => MODEL_TINY_URL,
+    }
+}
+
+fn model_size_label(name: &str) -> &'static str {
+    match name {
+        "tiny"   => "~75 MB",
+        "base"   => "~142 MB",
+        "small"  => "~466 MB",
+        "medium" => "~1.5 GB",
+        _        => "unknown",
+    }
+}
 
 // ── Entry point ────────────────────────────────────────────────────────────────
 fn main() -> eframe::Result {
@@ -83,6 +109,12 @@ struct App {
     log: Arc<Mutex<Vec<String>>>,
     processing: Arc<Mutex<bool>>,
     progress: Arc<Mutex<f32>>,
+
+    // Model download
+    model_downloading: Arc<Mutex<bool>>,
+    model_download_log: Arc<Mutex<Vec<String>>>,
+    show_model_prompt: bool,
+    pending_model: String,
 }
 
 impl App {
@@ -123,6 +155,10 @@ impl App {
             log: Arc::new(Mutex::new(log)),
             processing: Arc::new(Mutex::new(false)),
             progress: Arc::new(Mutex::new(0.0)),
+            model_downloading: Arc::new(Mutex::new(false)),
+            model_download_log: Arc::new(Mutex::new(Vec::new())),
+            show_model_prompt: false,
+            pending_model: String::new(),
         }
     }
 
@@ -220,10 +256,39 @@ impl App {
         self.model_dir.join(format!("ggml-{}.bin", self.model))
     }
 
+    fn model_path_for(&self, name: &str) -> PathBuf {
+        self.model_dir.join(format!("ggml-{}.bin", name))
+    }
+
     fn all_ready(&self) -> bool {
         self.bin_dir.join("ffmpeg.exe").exists()
             && self.bin_dir.join("whisper-cli.exe").exists()
             && self.model_path().exists()
+    }
+
+    fn start_model_download(&self, model_name: String) {
+        let model_dir = self.model_dir.clone();
+        let downloading = Arc::clone(&self.model_downloading);
+        let dl_log = Arc::clone(&self.model_download_log);
+
+        *downloading.lock().unwrap() = true;
+        dl_log.lock().unwrap().push(format!("Downloading ggml-{}.bin ({})...", model_name, model_size_label(&model_name)));
+
+        thread::spawn(move || {
+            let dest = model_dir.join(format!("ggml-{}.bin", model_name));
+            let url = model_url(&model_name);
+            match download_file(url, dest.to_str().unwrap_or("")) {
+                Ok(_) => {
+                    dl_log.lock().unwrap().push(format!("✓ ggml-{}.bin ready", model_name));
+                }
+                Err(e) => {
+                    dl_log.lock().unwrap().push(format!("✗ Download failed: {}", e));
+                    // Remove partial file
+                    let _ = std::fs::remove_file(&dest);
+                }
+            }
+            *downloading.lock().unwrap() = false;
+        });
     }
 
     fn generate_file(&self, file: String) {
@@ -462,6 +527,7 @@ impl App {
 
             ui.horizontal(|ui| {
                 ui.label("Model:");
+                let prev_model = self.model.clone();
                 egui::ComboBox::from_id_salt("model_combo")
                     .selected_text(&self.model)
                     .show_ui(ui, |ui| {
@@ -470,6 +536,14 @@ impl App {
                         ui.selectable_value(&mut self.model, "small".to_string(),  "small  — Accurate (~466 MB)");
                         ui.selectable_value(&mut self.model, "medium".to_string(), "medium — Best  (~1.5 GB)");
                     });
+
+                // If user selected a different model and it's not downloaded, prompt
+                if self.model != prev_model {
+                    if !self.model_path_for(&self.model).exists() {
+                        self.pending_model = self.model.clone();
+                        self.show_model_prompt = true;
+                    }
+                }
 
                 ui.add_space(16.0);
                 ui.label("Language:");
@@ -489,12 +563,83 @@ impl App {
                     });
 
                 ui.add_space(12.0);
-                if self.model_path().exists() {
+                let model_downloading = *self.model_downloading.lock().unwrap();
+                if model_downloading {
+                    ui.spinner();
+                    ui.label(egui::RichText::new("Downloading model...").color(egui::Color32::YELLOW).size(12.0));
+                } else if self.model_path().exists() {
                     ui.label(egui::RichText::new("✓ Ready").color(egui::Color32::GREEN).size(12.0));
                 } else {
-                    ui.label(egui::RichText::new("⚠ Model not found").color(egui::Color32::YELLOW).size(12.0));
+                    ui.label(egui::RichText::new("⚠ Not downloaded").color(egui::Color32::YELLOW).size(12.0));
                 }
             });
+
+            // Model download log (shown while downloading)
+            {
+                let dl_log = self.model_download_log.lock().unwrap();
+                let model_downloading = *self.model_downloading.lock().unwrap();
+                if model_downloading || (!dl_log.is_empty() && !self.model_path().exists()) {
+                    let log_text = dl_log.join("\n");
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::TextEdit::multiline(&mut log_text.as_str())
+                            .font(egui::TextStyle::Monospace)
+                            .desired_width(f32::INFINITY)
+                            .desired_rows(2),
+                    );
+                }
+            }
+
+            // Model install prompt dialog
+            if self.show_model_prompt {
+                let model_name = self.pending_model.clone();
+                let size_label = model_size_label(&model_name);
+                let mut open = true;
+                egui::Window::new("Download Model?")
+                    .collapsible(false)
+                    .resizable(false)
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .open(&mut open)
+                    .show(ctx, |ui| {
+                        ui.add_space(8.0);
+                        ui.label(format!(
+                            "The '{}' model is not installed yet.",
+                            model_name
+                        ));
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new(format!("Download size: {}", size_label))
+                                .color(egui::Color32::GRAY)
+                                .size(12.0),
+                        );
+                        ui.add_space(12.0);
+                        ui.horizontal(|ui| {
+                            if ui
+                                .add_sized([140.0, 32.0], egui::Button::new(
+                                    egui::RichText::new("⬇  Download Now").strong(),
+                                ))
+                                .clicked()
+                            {
+                                self.model_download_log.lock().unwrap().clear();
+                                self.start_model_download(model_name);
+                                self.show_model_prompt = false;
+                            }
+                            if ui
+                                .add_sized([80.0, 32.0], egui::Button::new("Cancel"))
+                                .clicked()
+                            {
+                                // Revert selection to a model that's already installed
+                                self.model = "tiny".to_string();
+                                self.show_model_prompt = false;
+                            }
+                        });
+                        ui.add_space(4.0);
+                    });
+                if !open {
+                    self.model = "tiny".to_string();
+                    self.show_model_prompt = false;
+                }
+            }
 
             ui.add_space(14.0);
             ui.separator();

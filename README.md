@@ -8,9 +8,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-lightblue?logo=windows)](https://github.com/portwebdesign/subtitle-generator/releases)
 [![Powered by whisper.cpp](https://img.shields.io/badge/Powered%20by-whisper.cpp-green)](https://github.com/ggerganov/whisper.cpp)
+[![Download](https://img.shields.io/github/v/release/portwebdesign/subtitle-generator?label=Download&color=brightgreen)](https://github.com/portwebdesign/subtitle-generator/releases/latest)
 
 Generate `.srt` subtitle files from MP4 videos — **no Python, no setup scripts, no cloud**.  
 Just run `subtitle-generator.exe`. It handles everything automatically.
+
+> ⬇️ **[Download the latest release →](https://github.com/portwebdesign/subtitle-generator/releases/latest)**
 
 </div>
 
@@ -34,7 +37,7 @@ Most subtitle tools are Python + PyInstaller. They ship with problems:
 
 ### 1. Download the release
 
-Grab `subtitle-generator.exe` from the [Releases](https://github.com/portwebdesign/subtitle-generator/releases) page.
+Grab `subtitle-generator.exe` from the **[Releases](https://github.com/portwebdesign/subtitle-generator/releases)** page.
 
 ### 2. Run it
 
@@ -109,8 +112,10 @@ Everything runs **offline**. No API keys. No subscriptions.
 
 | Setting | Options | Notes |
 |---------|---------|-------|
-| **Model** | tiny, base, small, medium | Larger = better quality, slower |
+| **Model** | tiny, base, small, medium | Larger = better quality, slower. Missing models are downloaded on demand. |
 | **Language** | English, Turkish, German, French, Spanish, Arabic, Russian, Chinese, Japanese, Korean | Match the spoken language for best results |
+
+> **Tip:** When you select a model that isn't installed yet, the app will ask if you want to download it — no manual steps needed.
 
 ---
 
@@ -127,7 +132,7 @@ subtitle-generator/
 │   ├── ffmpeg.exe       # Downloaded automatically
 │   └── whisper-cli.exe  # Downloaded automatically
 └── models/
-    └── ggml-tiny.bin    # Downloaded automatically
+    └── ggml-tiny.bin    # Downloaded automatically (others on demand)
 ```
 
 ---
@@ -141,8 +146,7 @@ subtitle-generator/
 | `small` | ~466 MB | ⚡⚡ | Great |
 | `medium` | ~1.5 GB | ⚡ | Very good |
 
-The app downloads `tiny` automatically. For other models, grab the `.bin` file from  
-[Hugging Face — ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp) and drop it in the `models/` folder.
+The app downloads `tiny` on first launch. All other models can be downloaded directly from the app — just select the model from the dropdown and click **Download Now** when prompted.
 
 ---
 
